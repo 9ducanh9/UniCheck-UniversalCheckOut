@@ -166,6 +166,11 @@ def create_app(settings=None, chain=None):
             allowed_origins.add(s.cart_demo_origin)
         if request.headers.get('origin') not in allowed_origins:
             raise HTTPException(403, 'Open the UniCheck demo page first')
+        if s.cart_demo_origin:
+            supplied = request.headers.get('x-unicheck-demo-password', '').encode()
+            expected = s.cart_demo_password.get_secret_value().encode()
+            if not secrets.compare_digest(supplied, expected):
+                raise HTTPException(401, 'Mật khẩu demo UniCheck không đúng.')
         client = Shopify(s)
         try:
             draft_id = client.create_cart_draft(body.items)

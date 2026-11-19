@@ -20,11 +20,14 @@ class Settings(BaseSettings):
     cors_origin: str = 'http://localhost:3000'
     allow_existing_fuji_demo: bool = False
     cart_demo_origin: str = ''
+    cart_demo_password: SecretStr = SecretStr('')
     shopify_shop: str = ''
     shopify_client_id: str = ''
     shopify_client_secret: SecretStr = SecretStr('')
 
     def validate_runtime(self):
+        if self.cart_demo_origin and self.allow_existing_fuji_demo and len(self.cart_demo_password.get_secret_value()) < 16:
+            raise ValueError('Hosted cart demo requires a password of at least 16 characters')
         if len(self.merchant_api_key.get_secret_value()) < 32 or len(self.checkout_secret.get_secret_value()) < 32:
             raise ValueError('API key and checkout secret must each have at least 32 characters')
         if self.confirmations < 1 or self.block_batch < 1 or self.start_block < 0:

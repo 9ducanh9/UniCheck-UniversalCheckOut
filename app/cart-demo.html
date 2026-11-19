@@ -34,7 +34,7 @@ button.addEventListener('click', async () => {
   status.textContent = 'Đang tạo đơn nháp trên Shopify…';
   try {
     const response = await fetch('/api/shopify/cart-demo', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: demoHeaders(),
       body: JSON.stringify({items}),
     });
     const data = await response.json();
@@ -45,5 +45,15 @@ button.addEventListener('click', async () => {
     button.disabled = false;
   }
 });
+
+function demoHeaders() {
+  const headers = {'Content-Type': 'application/json'};
+  if (location.protocol === 'https:') {
+    const password = window.prompt('Nhập mật khẩu demo UniCheck');
+    if (!password) throw Error('Bạn chưa nhập mật khẩu demo.');
+    headers['X-UniCheck-Demo-Password'] = password;
+  }
+  return headers;
+}
 </script>
 </html>
