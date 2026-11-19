@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Giỏ hàng · UniCheck</title>
+<style>
+body{margin:10vh auto;padding:24px;max-width:560px;background:#f4f6fa;color:#172034;font:16px/1.6 system-ui}
+main{background:white;padding:25px;border:1px solid #dfe5ef;border-radius:16px}
+button{background:#4338ca;color:white;border:0;border-radius:9px;padding:12px 18px;font:inherit;cursor:pointer}
+button:disabled{opacity:.5}
+</style>
+<main>
+  <h1>Thanh toán thử với UniCheck</h1>
+  <p id="cart"></p>
+  <p>Shopify tính lại tổng tiền trước khi bạn xác nhận thanh toán. Bản thử nghiệm dùng MockUSDC trên Avalanche Fuji.</p>
+  <button id="continue" disabled>Tạo phiên thanh toán</button>
+  <p id="status" role="status"></p>
+</main>
+<script>
+const button = document.getElementById('continue');
+const status = document.getElementById('status');
+let items;
+try {
+  items = JSON.parse(new URLSearchParams(location.hash.slice(1)).get('items'));
+  if (!Array.isArray(items) || !items.length) throw Error();
+  const count = items.reduce((total, item) => total + item.quantity, 0);
+  document.getElementById('cart').textContent = 'Giỏ Shopify có ' + count + ' sản phẩm.';
+  button.disabled = false;
+} catch {
+  status.textContent = 'Mở trang này từ nút UniCheck trong giỏ Shopify.';
+}
+button.addEventListener('click', async () => {
+  button.disabled = true;
+  status.textContent = 'Đang tạo đơn nháp trên Shopify…';
+  try {
+    const response = await fetch('/api/shopify/cart-demo', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({items}),
+    });
+    const data = await response.json();
+    if (!response.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Giỏ hàng không hợp lệ.');
+    location.replace('/checkout#' + new URLSearchParams({id: data.id, token: data.checkout_token}));
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+});
+</script>
+</html>

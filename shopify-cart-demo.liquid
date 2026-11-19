@@ -1,0 +1,28 @@
+<button type="button" class="button button--secondary" id="unicheck-cart-button">
+  Thanh toán thử với UniCheck
+</button>
+<p id="unicheck-cart-status" role="status"></p>
+<script>
+(() => {
+  const button = document.getElementById('unicheck-cart-button');
+  const status = document.getElementById('unicheck-cart-status');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = 'Đang đọc giỏ hàng…';
+    try {
+      const response = await fetch(window.Shopify.routes.root + 'cart.js', {cache: 'no-store'});
+      if (!response.ok) throw Error('Không đọc được giỏ hàng.');
+      const cart = await response.json();
+      if (!cart.items.length) throw Error('Giỏ hàng đang trống.');
+      if (cart.items.some(item => item.selling_plan_allocation || Object.keys(item.properties || {}).length)) {
+        throw Error('Bản thử nghiệm chỉ hỗ trợ sản phẩm thường.');
+      }
+      const items = cart.items.map(item => ({variant_id: String(item.variant_id), quantity: item.quantity}));
+      location.assign('http://localhost:8000/cart-demo#' + new URLSearchParams({items: JSON.stringify(items)}));
+    } catch (error) {
+      status.textContent = error.message;
+      button.disabled = false;
+    }
+  });
+})();
+</script>
