@@ -1,16 +1,31 @@
-# Universal Checkout Backend — bản MVP
+# UniCheck
 
-Backend một merchant, một chain và một Router, khớp PaymentRouter Work Package 04 của Thanh. Có FastAPI, PostgreSQL, signer EIP-712 và worker quét event độc lập với checkout. Chưa tích hợp Shopify; chưa triển khai public.
+UniCheck adds a wallet payment option to the cart of a Shopify development store. The hosted demo runs on Railway and uses MockUSDC on Avalanche Fuji (chain ID 43113).
 
-## Trạng thái tích hợp demo hiện tại
+## Demo
 
-Theo yêu cầu dùng deployment cũ, `.env` local bật `ALLOW_EXISTING_FUJI_DEMO=true`. Ngoại lệ chỉ có tác dụng trên chain 43113, Router `0xC83FA9cEcf7fc125dbeC893402c6f0f5e3f5AeE9` và MockUSDC `0xA61ABC464034161B4C5abAee7298c1503cF6E199`. Khóa demo chỉ được đọc từ bản repo Thanh đã tải về và lưu trong `.env` bị gitignore; không nhúng trong checkout mới. Quyền on-chain không bị sửa.
+1. Open the [UniCheck Shopify dev store](https://unicheck-demo.myshopify.com/) and add a regular, one-time purchase product. The store may require its storefront password.
+2. Open the cart drawer or the [full cart page](https://unicheck-demo.myshopify.com/cart). Choose **Thanh toán thử với UniCheck** below **Check out**.
+3. Choose **Tạo phiên thanh toán** on the hosted page. The backend reads the price from Shopify, creates a draft order and opens Hosted Checkout. This step no longer asks for a separate UniCheck demo password.
+4. Connect Core on Fuji, obtain test MockUSDC if needed, approve the exact amount and confirm the test payment. The buyer needs Fuji AVAX for gas.
 
-Merchant demo nhận MockUSDC là ví `0x18BaCa02E64F7Cdd9B888F9D2D67786bc0A15bc1`; không phải merchant production. Đã kiểm tra API ký intent có digest khớp contract thật bằng RPC read-only. Chưa gửi giao dịch mới hoặc nghiệm thu PAID end-to-end.
+The latest hosted checks confirmed draft order creation and wallet connection. A new payment reaching **PAID** on the current hosted deployment has yet to be verified. The demo uses a cart integration. A native Shopify Payments Extension requires Shopify approval.
 
-Tạo link demo 10 MockUSDC có hiệu lực một giờ: `docker compose exec api python -m app.demo_session`. Mở link bằng trình duyệt có MetaMask/Core Wallet, kết nối Fuji, nhận MockUSDC nếu thiếu, bấm Approve & Thanh toán. Ví buyer cần test AVAX. Trang `/checkout` là giao diện tích hợp mới dựa trên luồng connect/approve/pay đã kiểm tra trong repo Thanh, không phải xác nhận frontend riêng của Phú Đại đã được ghép.
+## Source code and deployment
 
-`docker compose exec api python -m app.check_fuji` kiểm tra digest read-only và tạo một phiên kiểm tra riêng. Worker local bắt đầu từ block 61118412, được quan sát trước khi backend này tạo phiên đầu tiên; không import các giao dịch demo cũ thành đơn PAID.
+| Component | Source |
+| --- | --- |
+| Hosted Checkout and cart handoff | [checkout.html](app/checkout.html), [cart-demo.html](app/cart-demo.html) |
+| Shopify cart button and draft-order integration | [Liquid example](shopify-cart-demo.liquid), [Shopify adapter](app/shopify.py) |
+| FastAPI, EIP-712 signing and PostgreSQL | [API](app/main.py), [signing](app/chain.py), [database](app/db.py) |
+| Fuji verification and Shopify reconciliation | [worker](app/worker.py), [Shopify adapter](app/shopify.py) |
+| Solidity by Thanh | [PaymentRouter.sol](https://github.com/thanhhoang06/Check_out_blockchain/blob/ec689076276c65a9b64d6e5d76ba299cdcb2dc46/contracts/PaymentRouter.sol), [MockUSDC.sol](https://github.com/thanhhoang06/Check_out_blockchain/blob/ec689076276c65a9b64d6e5d76ba299cdcb2dc46/contracts/MockUSDC.sol) |
+
+- Railway [backend health](https://backend-production-47a83b3c.up.railway.app/health). The deployment uses PostgreSQL and a separate Fuji worker.
+- Fuji [PaymentRouter](https://testnet.snowtrace.io/address/0xC83FA9cEcf7fc125dbeC893402c6f0f5e3f5AeE9) and [MockUSDC](https://testnet.snowtrace.io/address/0xA61ABC464034161B4C5abAee7298c1503cF6E199).
+- The backend signs the payment intent. The buyer signs the transaction. After verifying the receipt and matching the payment event, the worker records **PAID** and completes the Shopify draft order.
+
+The Fuji deployment uses an existing demo Router and a signer that was previously exposed. Use it only with test tokens. Keep all Shopify credentials, API keys and signing keys in server-side environment variables.
 
 ## Chạy bằng Docker
 
@@ -24,7 +39,7 @@ Database dùng tài khoản phát triển local, chỉ bind localhost. Trước 
 
 ## Bật ký và xác minh Fuji
 
-- Thanh phải thay cả owner và signer đã lộ; backend cố ý từ chối owner/signer demo cũ.
+- Với deployment mới, dùng owner và signer riêng. Ngoại lệ cho Router demo hiện tại chỉ áp dụng trên Fuji khi bật `ALLOW_EXISTING_FUJI_DEMO`.
 - `SIGNER_PRIVATE_KEY` là khóa mới chỉ lưu server; public address phải trùng `backendSigner()` trên Router. Backend không gửi transaction và không cần giữ AVAX.
 - `CHAIN_ID=43113`; điền địa chỉ token, Router và `START_BLOCK` bằng block deploy thực tế. Để 0 sẽ quét từ genesis, rất chậm.
 - Chạy `docker compose --profile chain up --build -d worker` sau khi API đã khởi tạo schema.
@@ -77,9 +92,9 @@ Trạng thái MVP: `PENDING`, `PAID`, `EXPIRED`. Reject hoặc transaction rever
 
 `docker build -t universal-checkout-backend .`
 
-`docker run --rm universal-checkout-backend python -m pytest -q`
+`docker run --rm universal-checkout-backend python -m pytest -q tests`
 
-Đã chạy 11/11 tests thành công trên SQLite và PostgreSQL 17 trong Docker (15/11/2026). Tests dùng signer test ngẫu nhiên và bằng chứng RPC giả lập; không dùng khóa demo, không gửi giao dịch Fuji. Bao gồm chữ ký EIP-712, auth, idempotency, buyer binding, evidence mismatch, expiry, retry/checkpoint và phát hiện reorg. Chưa test end-to-end với ví và Router Fuji mới. Các file trong `tests/` không phải khóa hay cấu hình production.
+Bộ test backend có 16 test đã chạy thành công, gồm xác minh thanh toán và tích hợp Shopify với dữ liệu giả lập.
 
 Để chạy bộ test với PostgreSQL, đặt `TEST_DATABASE_URL` vào **database riêng chỉ dành cho test**. Fixture xóa và tạo lại bảng mỗi test, tuyệt đối không dùng database có dữ liệu thật. Bản chạy Docker dùng các phiên bản cố định trong `requirements-lock.txt` (Linux/Python 3.13).
 
@@ -90,9 +105,9 @@ Python 3.13: tạo virtual environment, `pip install -r requirements.txt`, cấu
 ## Giới hạn bàn giao
 
 - `init_db` tạo schema mới, không migrate schema cũ. Trước khi sửa schema có dữ liệu cần bổ sung migration có version và backup.
-- Không có Shopify adapter, webhook fulfillment, refund, multi-merchant hoặc quản trị đơn hàng.
+- Demo Shopify hỗ trợ tạo và hoàn tất draft order. Webhook fulfillment, refund, multi-merchant và quản trị đơn hàng nằm ngoài phạm vi hiện tại.
 - Worker nhận event từ Router tin cậy và đối chiếu receipt thành công, canonical block, paymentId, buyer, merchant, token, amount và deadline. Không hỗ trợ fee-on-transfer token.
 - Thay Router: dừng tạo phiên cũ, đối soát hết phiên đang chạy trước khi chuyển cấu hình. Worker hiện quét một Router mỗi tiến trình.
-- Không có auto-recovery deep reorg; cần vận hành đối soát. Không chạy public trước khi có giám sát worker, secrets manager và chính sách retry/fulfillment.
+- Không có auto-recovery deep reorg; cần vận hành đối soát. Để chạy production cần giám sát worker, quản lý secrets và quy trình đối soát.
 
 Tham khảo API thư viện: https://eth-account.readthedocs.io/en/stable/eth_account.html và https://web3py.readthedocs.io/en/stable/web3.eth.html.
